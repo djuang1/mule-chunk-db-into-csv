@@ -1,0 +1,11 @@
+{
+    "inputMessageMetadata": {},
+    "outputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "#_custom_mule_metadata_type_#",
+            "typeId": "janky3"
+        }
+    },
+    "id": "b36260f1-fd6f-437c-ae03-e5f84a2d6784",
+    "version": "5.2.0.0"
+}
