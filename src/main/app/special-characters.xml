@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+<batch:job name="janky_batch">
+        <batch:input>
+            <db:select config-ref="Generic_Database_Configuration" streaming="true" doc:name="Database">
+                <db:parameterized-query><![CDATA[SELECT id, stuff
+  FROM public.jankytext;]]></db:parameterized-query>
+            </db:select>
+        </batch:input>
+        <batch:process-records>
+            <batch:step name="Batch_Step2">
+                <batch:commit size="10" doc:name="Batch Commit">
+                    <dw:transform-message doc:name="Transform Message" metadata:id="429813f6-2c63-47dd-9ed4-1b01997d50c2">
+                        <dw:input-payload doc:sample="list_map.dwl"/>
+                        <dw:set-payload><![CDATA[%dw 1.0
+%output application/csv
+---
+payload map {
+	id: $.id as :string,
+	stuff: $.stuff 
+}]]></dw:set-payload>
+                    </dw:transform-message>
+                    <file:outbound-endpoint path="${file.path.out}" outputPattern="janky#[app.registry.counterBean.count()].csv" responseTimeout="10000" doc:name="File"/>
+                </batch:commit>
+            </batch:step>
+            <batch:step name="Batch_Step">
+                <batch:commit size="10" doc:name="Batch Commit">
+                    <dw:transform-message doc:name="Transform Message" metadata:id="c8cc8b50-1e61-45b5-acff-e09b96d7f570">
+                        <dw:set-payload><![CDATA[%dw 1.0
+%output application/csv
+---
+payload map {
+	id: $.id as :string,
+	stuff: (($.stuff replace /\n/ with "\\\\n") replace /\r/ with "\\\\r") replace /\t/ with "\\\\t"
+}]]></dw:set-payload>
+                    </dw:transform-message>
+                    <object-to-string-transformer doc:name="Object to String"/>
+                    <set-payload value="#[payload.toString().replaceAll(&quot;\\\\{2}&quot;,&quot;\\\\&quot;)]" doc:name="Set Payload"/>
+                    <file:outbound-endpoint responseTimeout="10000" doc:name="File" outputPattern="janky#[app.registry.counterBean.count()].csv" path="${file.path.out}"/>
+                </batch:commit>
+            </batch:step>
+        </batch:process-records>
+        <batch:on-complete>
+            <logger level="INFO" doc:name="Logger" message="#[payload.elapsedTimeInMillis]"/>
+        </batch:on-complete>
+    </batch:job>
+    
+    <flow name="chunk-db-to-fileFlow1">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/janky" doc:name="HTTP"/>
+        <batch:execute name="janky_batch" doc:name="chunk-db-to-fileBatch"/>
+        <set-payload value="&lt;h1&gt;Janky Batch Process initiated&lt;/h1&gt;&lt;b&gt;ID:&lt;/b&gt;#[payload.getId()]&lt;br/&gt;&lt;b&gt;Records to Be Processed: &lt;/b&gt;#[payload.getRecordCount()]&lt;br/&gt; &lt;b&gt;Start execution on: &lt;/b&gt;#[new java.util.Date()]" doc:name="Set Batch Status response Payload"/>
+        
+    </flow>
+
+</mule>
