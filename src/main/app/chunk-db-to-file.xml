@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	xmlns:spring="http://www.springframework.org/schema/beans" 
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
@@ -10,7 +10,8 @@ http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/cu
 http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
 http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
 http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
     <db:mysql-config name="MySQL_Configuration" host="54.237.5.219" port="3306" user="hris" password="Mule1379" database="hris" doc:name="MySQL Configuration"/>
     
     <db:generic-config name="Generic_Database_Configuration" url="jdbc:postgresql://${jdbc.host}:${jdbc.port}/${jdbc.db}?user=${jdbc.user}&amp;password=" driverClassName="org.postgresql.Driver" doc:name="Generic Database Configuration"/>
@@ -36,7 +37,7 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 ---
 payload map ((payload01 , indexOfPayload01) -> {
 	id: payload01.id as :string,
-	stuff: payload01.stuff
+	stuff: payload01.stuff replace "\\\\{2}" with "\\\\"
 })]]></dw:set-payload>
                     </dw:transform-message>
                     <file:outbound-endpoint path="${file.path.out}" outputPattern="janky#[app.registry.counterBean.count()].csv" responseTimeout="10000" doc:name="File"/>
@@ -48,11 +49,13 @@ payload map ((payload01 , indexOfPayload01) -> {
                         <dw:set-payload><![CDATA[%dw 1.0
 %output application/csv
 ---
-payload map ((payload01 , indexOfPayload01) -> {
-	id: payload01.id as :string,
-	stuff: payload01.stuff replace /\n/ with "\\n"
-})]]></dw:set-payload>
+payload map {
+	id: $.id as :string,
+	stuff: (($.stuff replace /\n/ with "\\\\n") replace /\r/ with "\\\\r") replace /\t/ with "\\\\t"
+}]]></dw:set-payload>
                     </dw:transform-message>
+                    <object-to-string-transformer doc:name="Object to String"/>
+                    <set-payload value="#[payload.toString().replaceAll(&quot;\\\\{2}&quot;,&quot;\\\\&quot;)]" doc:name="Set Payload"/>
                     <file:outbound-endpoint responseTimeout="10000" doc:name="File" outputPattern="janky#[app.registry.counterBean.count()].csv" path="${file.path.out}"/>
                 </batch:commit>
             </batch:step>
