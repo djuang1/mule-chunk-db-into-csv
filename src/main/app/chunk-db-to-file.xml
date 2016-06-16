@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+<mule xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	xmlns:spring="http://www.springframework.org/schema/beans" 
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
 http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
 http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
@@ -14,7 +16,9 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
     <db:mysql-config name="MySQL_Configuration" host="54.237.5.219" port="3306" user="hris" password="Mule1379" database="hris" doc:name="MySQL Configuration"/>
     
-    <db:generic-config name="Generic_Database_Configuration" url="jdbc:postgresql://${jdbc.host}:${jdbc.port}/${jdbc.db}?user=${jdbc.user}&amp;password=" driverClassName="org.postgresql.Driver" doc:name="Generic Database Configuration"/>
+    <db:generic-config name="Generic_Database_Configuration" url="jdbc:postgresql://${jdbc.host}:${jdbc.port}/${jdbc.db}?user=${jdbc.user}&amp;password=${jdbc.password}" driverClassName="org.postgresql.Driver" doc:name="Generic Database Configuration"/>
+    
+    <vm:connector name="ayncQueueConfig" validateConnections="true" doc:name="VM"/>
     
     <spring:beans>
   		<spring:bean id="counterBean" class="com.mulesoft.dejim.Counter" />
@@ -32,12 +36,13 @@ http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mul
             <batch:step name="Batch_Step2">
                 <batch:commit size="10" doc:name="Batch Commit">
                     <dw:transform-message metadata:id="57762c50-673c-4c5e-9763-63f68223bc73" doc:name="Transform Message">
+                        <dw:input-payload doc:sample="list_map.dwl"/>
                         <dw:set-payload><![CDATA[%dw 1.0
 %output application/csv
 ---
 payload map ((payload01 , indexOfPayload01) -> {
 	id: payload01.id as :string,
-	stuff: payload01.stuff replace "\\\\{2}" with "\\\\"
+	stuff: payload01.stuff replace /\n/ with "\\\\n" replace /\r/ with "\\\\r" replace /\t/ with "\\\\t"
 })]]></dw:set-payload>
                     </dw:transform-message>
                     <file:outbound-endpoint path="${file.path.out}" outputPattern="janky#[app.registry.counterBean.count()].csv" responseTimeout="10000" doc:name="File"/>
@@ -66,18 +71,18 @@ payload map {
     </batch:job>
     <batch:job name="attempt_batch">
         <batch:input>
-            <db:select config-ref="Generic_Database_Configuration" doc:name="Database">
+            <db:select config-ref="Generic_Database_Configuration" doc:name="Database" streaming="true">
                 <db:parameterized-query><![CDATA[SELECT pk1, gradebook_grade_pk1, qti_result_data_pk1, linkrefid, score, 
        grade, status, attempt_date, date_added, date_modified, latest_ind, 
        comment_public_ind, exempt_ind, override_ind, group_attempt_pk1, 
        first_graded_date, last_graded_date, civetl_iteration, civetl_row_count
   FROM public.attempt
-LIMIT 1000;]]></db:parameterized-query>
+  LIMIT 1000;]]></db:parameterized-query>
             </db:select>
         </batch:input>
         <batch:process-records>
             <batch:step name="Batch_Step1">
-                <batch:commit size="100" doc:name="Batch Commit">
+                <batch:commit  doc:name="Batch Commit" streaming="true">
                     <dw:transform-message metadata:id="dec783de-7963-4179-a841-8684d6a15a8c" doc:name="Transform Message">
                         <dw:set-payload><![CDATA[%dw 1.0
 %output application/csv
@@ -86,6 +91,9 @@ payload]]></dw:set-payload>
                     </dw:transform-message>
                     <file:outbound-endpoint path="${file.path.out}" outputPattern="attempt#[app.registry.counterBean.count()].csv" responseTimeout="10000" doc:name="File"/>
                 </batch:commit>
+            </batch:step>
+            <batch:step name="Batch_Step3" accept-policy="ONLY_FAILURES">
+            	<vm:outbound-endpoint exchange-pattern="one-way" path="errorReceive" connector-ref="ayncQueueConfig" doc:name="sendToErrorReceive"/>
             </batch:step>
         </batch:process-records>
         <batch:on-complete>
@@ -103,5 +111,11 @@ payload]]></dw:set-payload>
         <batch:execute name="janky_batch" doc:name="chunk-db-to-fileBatch"/>
         <set-payload value="&lt;h1&gt;Janky Batch Process initiated&lt;/h1&gt;&lt;b&gt;ID:&lt;/b&gt;#[payload.getId()]&lt;br/&gt;&lt;b&gt;Records to Be Processed: &lt;/b&gt;#[payload.getRecordCount()]&lt;br/&gt; &lt;b&gt;Start execution on: &lt;/b&gt;#[new java.util.Date()]" doc:name="Set Batch Status response Payload"/>
         
+    </flow>
+    
+    <flow name="errorReceiver">
+        <vm:inbound-endpoint exchange-pattern="one-way" path="errorReceive" doc:name="vmErrorReceive"/>
+        <object-to-string-transformer doc:name="Object to String"/>
+        <file:outbound-endpoint path="${file.path.out}" responseTimeout="10000" doc:name="logErrors" outputPattern="failedrows.txt"/>
     </flow>
 </mule>
