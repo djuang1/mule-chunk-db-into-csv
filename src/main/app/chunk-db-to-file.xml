@@ -14,8 +14,7 @@ http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/jso
 http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
-    <db:mysql-config name="MySQL_Configuration" host="54.237.5.219" port="3306" user="hris" password="Mule1379" database="hris" doc:name="MySQL Configuration"/>
-    
+
     <db:generic-config name="Generic_Database_Configuration" url="jdbc:postgresql://${jdbc.host}:${jdbc.port}/${jdbc.db}?user=${jdbc.user}&amp;password=${jdbc.password}" driverClassName="org.postgresql.Driver" doc:name="Generic Database Configuration"/>
     
     <vm:connector name="ayncQueueConfig" validateConnections="true" doc:name="VM"/>
@@ -40,10 +39,10 @@ http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mul
                         <dw:set-payload><![CDATA[%dw 1.0
 %output application/csv
 ---
-payload map ((payload01 , indexOfPayload01) -> {
-	id: payload01.id as :string,
-	stuff: payload01.stuff replace /\n/ with "\\\\n" replace /\r/ with "\\\\r" replace /\t/ with "\\\\t"
-})]]></dw:set-payload>
+payload map {
+	id: $.id as :string,
+	stuff: $.stuff 
+}]]></dw:set-payload>
                     </dw:transform-message>
                     <file:outbound-endpoint path="${file.path.out}" outputPattern="janky#[app.registry.counterBean.count()].csv" responseTimeout="10000" doc:name="File"/>
                 </batch:commit>
@@ -76,8 +75,7 @@ payload map {
        grade, status, attempt_date, date_added, date_modified, latest_ind, 
        comment_public_ind, exempt_ind, override_ind, group_attempt_pk1, 
        first_graded_date, last_graded_date, civetl_iteration, civetl_row_count
-  FROM public.attempt
-  LIMIT 500000;]]></db:parameterized-query>
+  FROM public.attempt;]]></db:parameterized-query>
             </db:select>
         </batch:input>
         <batch:process-records>
