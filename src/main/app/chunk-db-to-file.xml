@@ -77,12 +77,12 @@ payload map {
        comment_public_ind, exempt_ind, override_ind, group_attempt_pk1, 
        first_graded_date, last_graded_date, civetl_iteration, civetl_row_count
   FROM public.attempt
-  LIMIT 1000;]]></db:parameterized-query>
+  LIMIT 500000;]]></db:parameterized-query>
             </db:select>
         </batch:input>
         <batch:process-records>
-            <batch:step name="Batch_Step1">
-                <batch:commit  doc:name="Batch Commit" streaming="true">
+            <batch:step name="Batch_Step1" accept-policy="ALL">
+                <batch:commit size="1000" doc:name="Batch Commit">
                     <dw:transform-message metadata:id="dec783de-7963-4179-a841-8684d6a15a8c" doc:name="Transform Message">
                         <dw:set-payload><![CDATA[%dw 1.0
 %output application/csv
